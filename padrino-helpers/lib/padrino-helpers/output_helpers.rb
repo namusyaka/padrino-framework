@@ -134,8 +134,13 @@ module Padrino
       #   content_for(:name) { |name| ...content... }
       #   content_for(:name, "I'm Jeff")
       #
-      def content_for(key, content = nil, &block)
-        content_blocks[key.to_sym] << (block_given? ? block : Proc.new { content })
+      def content_for(key, content = nil, options = {}, &block)
+        options = content if content.is_a?(Hash)
+        if options[:flush]
+          content_blocks[key.to_sym] = [(block_given? ? block : Proc.new { content })]
+        else
+          content_blocks[key.to_sym] << (block_given? ? block : Proc.new { content })
+        end
       end
 
       ##
