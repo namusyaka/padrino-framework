@@ -15,61 +15,12 @@ module Padrino
     end
 
     class ApplicationWrapper < SimpleDelegator
+      attr_accessor :uri_root
+      attr_writer :public_folder
+
       def initialize(app, options = {})
         @options = options
         super(app)
-      end
-
-      def set(option, value = (non_set = true), ignore_setter = false, &block)
-        obj = __getobj__
-        if obj.respond_to?(:set)
-          obj.set(option, value, ignore_setter, &block)
-        else
-          raise ArgumentError if block and !not_set
-          value, not_set = block, false if block
-
-          if not_set
-            raise ArgumentError unless option.respond_to?(:each)
-            option.each { |k,v| set(k, v) }
-            return self
-          end
-
-          if respond_to?("#{option}=") and not ignore_setter
-            return __send__("#{option}=", value)
-          end
-
-          setter = proc { |val| set option, val, true }
-          getter = proc { value }
-
-          case value
-          when Proc
-            getter = value
-          when Symbol, Fixnum, FalseClass, TrueClass, NilClass
-            getter = value.inspect
-          when Hash
-            setter = proc do |val|
-              val = value.merge val if Hash === val
-              set option, val, true
-            end
-          end
-
-          define_singleton("#{option}=", setter) if setter
-          define_singleton(option, getter) if getter
-          define_singleton("#{option}?", "!!#{option}") unless method_defined? "#{option}?"
-          self
-        end
-      end
-
-      def define_singleton(name, content = Proc.new)
-        (class << self; self; end).class_eval do
-        undef_method(name) if method_defined? name
-        String === content ? class_eval("def #{name}() #{content}; end") : define_method(name, &content)
-        end
-      end
-
-      def method_defined?(method_name)
-        obj = __getobj__
-        obj.respond_to?(method_name) ? obj.method_defined?(method_name) : false
       end
 
       def dependencies
@@ -80,6 +31,12 @@ module Padrino
         @__prerequisite ||= []
       end
 
+      def app_file
+        return @__app_file if @__app_file
+        obj = __getobj__
+        @__app_file = obj.respond_to?(:app_file) ? obj.app_file : @options[:app_file]
+      end
+
       def root
         return @__root if @__root
         obj = __getobj__
@@ -87,13 +44,7 @@ module Padrino
       end
 
       def public_folder
-        ""
-      end
-
-      def app_file
-        return @__app_file if @__app_file
-        obj = __getobj__
-        @__app_file = obj.respond_to?(:app_file) ? obj.app_file : @options[:app_file]
+        @public_folder ||= ""
       end
 
       def app_name
@@ -186,13 +137,18 @@ module Padrino
     #
     def map_onto(router)
       app_data, app_obj = self, @app_obj
-      app_obj.set :uri_root,       app_data.uri_root
-      app_obj.set :app_name,       app_data.app_obj.app_name.to_s
-      app_obj.set :app_file,       app_data.app_file unless ::File.exist?(app_obj.app_file)
-      app_obj.set :root,           app_data.app_root unless app_data.app_root.blank?
-      app_obj.set :public_folder,  Padrino.root('public', app_data.uri_root) unless File.exist?(app_obj.public_folder)
-      app_obj.set :static,         File.exist?(app_obj.public_folder) if app_obj.nil?
-      app_obj.set :cascade,        app_data.cascade
+      if padrino_application?
+        app_obj.set :uri_root,       app_data.uri_root
+        app_obj.set :app_name,       app_data.app_obj.app_name.to_s
+        app_obj.set :app_file,       app_data.app_file unless ::File.exist?(app_obj.app_file)
+        app_obj.set :root,           app_data.app_root unless app_data.app_root.blank?
+        app_obj.set :public_folder,  Padrino.root('public', app_data.uri_root) unless File.exist?(app_obj.public_folder)
+        app_obj.set :static,         File.exist?(app_obj.public_folder) if app_obj.nil?
+        app_obj.set :cascade,        app_data.cascade
+      else
+        app_obj.uri_root      = app_data.uri_root
+        app_obj.public_folder = Padrino.root('public', app_data.uri_root) unless ::File.exist?(app_obj.public_folder)
+      end
       app_obj.setup_application! # Initializes the app here with above settings.
       router.map(:to => app_obj, :path => app_data.uri_root, :host => app_data.app_host)
     end
