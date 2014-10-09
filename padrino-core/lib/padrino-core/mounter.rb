@@ -1,3 +1,5 @@
+require 'delegate'
+
 module Padrino
   ##
   # Represents a particular mounted Padrino application.
@@ -10,6 +12,102 @@ module Padrino
   class Mounter
     DEFAULT_CASCADE = [404, 405]
     class MounterException < RuntimeError
+    end
+
+    class ApplicationWrapper < SimpleDelegator
+      def initialize(app, options = {})
+        @options = options
+        super(app)
+      end
+
+      def set(option, value = (non_set = true), ignore_setter = false, &block)
+        obj = __getobj__
+        if obj.respond_to?(:set)
+          obj.set(option, value, ignore_setter, &block)
+        else
+          raise ArgumentError if block and !not_set
+          value, not_set = block, false if block
+
+          if not_set
+            raise ArgumentError unless option.respond_to?(:each)
+            option.each { |k,v| set(k, v) }
+            return self
+          end
+
+          if respond_to?("#{option}=") and not ignore_setter
+            return __send__("#{option}=", value)
+          end
+
+          setter = proc { |val| set option, val, true }
+          getter = proc { value }
+
+          case value
+          when Proc
+            getter = value
+          when Symbol, Fixnum, FalseClass, TrueClass, NilClass
+            getter = value.inspect
+          when Hash
+            setter = proc do |val|
+              val = value.merge val if Hash === val
+              set option, val, true
+            end
+          end
+
+          define_singleton("#{option}=", setter) if setter
+          define_singleton(option, getter) if getter
+          define_singleton("#{option}?", "!!#{option}") unless method_defined? "#{option}?"
+          self
+        end
+      end
+
+      def define_singleton(name, content = Proc.new)
+        (class << self; self; end).class_eval do
+        undef_method(name) if method_defined? name
+        String === content ? class_eval("def #{name}() #{content}; end") : define_method(name, &content)
+        end
+      end
+
+      def method_defined?(method_name)
+        obj = __getobj__
+        obj.respond_to?(method_name) ? obj.method_defined?(method_name) : false
+      end
+
+      def dependencies
+        @__dependencies ||= Dir["#{root}/**/*.rb"]
+      end
+
+      def prerequisite
+        @__prerequisite ||= []
+      end
+
+      def root
+        return @__root if @__root
+        obj = __getobj__
+        @__root = obj.respond_to?(:root) ? obj.root : File.expand_path("#{app_file}/../")
+      end
+
+      def public_folder
+        ""
+      end
+
+      def app_file
+        return @__app_file if @__app_file
+        obj = __getobj__
+        @__app_file = obj.respond_to?(:app_file) ? obj.app_file : @options[:app_file]
+      end
+
+      def app_name
+        @__app_name ||= @options[:app_name] || __getobj__.to_s.underscore.to_sym
+      end
+
+      def setup_application!
+        @configured ||=
+          begin
+            $LOAD_PATH.concat(prerequisite)
+            Padrino.require_dependencies(dependencies, :force => true)
+            true
+          end
+      end
     end
 
     attr_accessor :name, :uri_root, :app_file, :app_class, :app_root, :app_obj, :app_host, :cascade
@@ -32,10 +130,15 @@ module Padrino
       @app_file  = options[:app_file]  || locate_app_file
       @app_obj   = options[:app_obj]   || app_constant || locate_app_object
       ensure_app_file! || ensure_app_object!
+      @app_obj   = ApplicationWrapper.new(@app_obj, options) unless padrino_application?
       @app_root  = options[:app_root]  || (@app_obj.respond_to?(:root) && @app_obj.root || File.dirname(@app_file))
       @uri_root  = "/"
       @cascade   = options[:cascade] ? true == options[:cascade] ? DEFAULT_CASCADE.dup : Array(options[:cascade]) : []
       Padrino::Reloader.exclude_constants << @app_class
+    end
+
+    def padrino_application?
+      @app_obj < Padrino::Application rescue false
     end
 
     ##
