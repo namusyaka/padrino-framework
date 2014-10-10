@@ -89,7 +89,9 @@ module Padrino
     end
 
     def padrino_application?
-      @app_obj < Padrino::Application rescue false
+      @app_obj.ancestors.include?(Padrino::Application)
+    rescue NameError
+      false
     end
 
     ##
