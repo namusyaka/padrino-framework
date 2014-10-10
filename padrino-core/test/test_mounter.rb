@@ -267,6 +267,8 @@ describe "Mounter" do
       assert_equal "hello rack app2", res.body
       res = Rack::MockRequest.new(app).get("/sinatra_app")
       assert_equal "hello sinatra app", res.body
+      res = Rack::MockRequest.new(app).get("/sinatra_app/static.html")
+      assert_equal "hello static file\n", res.body
     end
 
     it 'should support the Rack Application inside padrino project' do

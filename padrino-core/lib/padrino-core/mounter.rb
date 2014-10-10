@@ -44,7 +44,9 @@ module Padrino
       end
 
       def public_folder
-        @public_folder ||= ""
+        return @public_folder if @public_folder
+        obj = __getobj__
+        @public_folder = obj.respond_to?(:public_folder) ? obj.public_folder : ""
       end
 
       def app_name
