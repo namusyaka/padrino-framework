@@ -94,6 +94,8 @@ module Padrino
 
         CACHED_VERBS = { 'GET' => true, 'HEAD' => true }.freeze
 
+        private
+
         def load_cached_response
           began_at = Time.now
           route_cache_key = resolve_cache_key || env['PATH_INFO']
