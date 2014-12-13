@@ -111,7 +111,7 @@ module Padrino
           return unless response_body.kind_of?(String)
 
           began_at = Time.now
-          route_cache_key = resolve_cache_key || request.env['PATH_INFO']
+          route_cache_key = resolve_cache_key || env['PATH_INFO']
 
           content = {
             :body         => response_body,
