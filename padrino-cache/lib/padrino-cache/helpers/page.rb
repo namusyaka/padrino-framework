@@ -138,7 +138,7 @@ module Padrino
 
         def reset_cache_variables
           CACHE_VARIABLES.each do |name|
-            remove_instance_variable(:"@#{name}") if instance_variable_defined?(:"@#{name}")
+            remove_instance_variable(:"@__#{name}") if instance_variable_defined?(:"@__#{name}")
           end
         end
 

@@ -115,8 +115,8 @@ module Padrino
       end
 
       module LegacyConfiguration
-        def set(option, value = (not_set = true), ignore_setter = false, &block)
-          option = :cache_adapter if option == :cache
+        def set(*args)
+          args[0] = :cache_adapter if args.first == :cache
           super
         end
       end
