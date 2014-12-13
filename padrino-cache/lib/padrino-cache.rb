@@ -97,18 +97,32 @@ module Padrino
         app.helpers Padrino::Cache::Helpers::CacheStore
         app.helpers Padrino::Cache::Helpers::Fragment
         app.helpers Padrino::Cache::Helpers::Page
-        app.set :cache, Padrino::Cache.new(:File,
-                                           :dir => Padrino.root('tmp', defined?(app.app_name) ? app.app_name.to_s : '', 'cache'))
+
+        unless app.ancestors.include?(Padrino::Application)
+          app.use Padrino::Logger::Rack, app.respond_to?(:root) ? app.root : "/"
+        end 
+
+        app.extend LegacyConfiguration
+
+        app.set :cache_adapter, Padrino::Cache.new(:File, :dir => Padrino.root('tmp', defined?(app.app_name) ? app.app_name.to_s : '', 'cache'))
+        app.after do
+          expires = @__cache_expires || (@route ? @route.cache_expires : nil)
+          save_cached_response(expires) if cache_expired?
+          reset_cache_variables
+        end
         app.disable :caching
         included(app)
       end
 
-      def included(base)
-        base.extend Padrino::Cache::Helpers::Page::ClassMethods
+      module LegacyConfiguration
+        def set(option, value = (not_set = true), ignore_setter = false, &block)
+          option = :cache_adapter if option == :cache
+          super
+        end
       end
 
-      def padrino_route_added(route, verb, path, args, options, block)
-        Padrino::Cache::Helpers::Page.padrino_route_added(route, verb, path, args, options, block)
+      def included(base)
+        base.extend Padrino::Cache::Helpers::Page::ClassMethods
       end
     end
 

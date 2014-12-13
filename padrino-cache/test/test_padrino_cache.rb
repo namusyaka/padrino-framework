@@ -183,6 +183,44 @@ describe "PadrinoCache" do
     assert_equal 'test', body
   end
 
+  it 'should allow expires passed in route option' do
+    called = false
+    mock_app do
+      register Padrino::Cache
+      controller :cache => true do
+        enable :caching
+        get("/foo", :cache => [ :expires => 1 ]){ called ? halt(500) : (called = 'test') }
+      end
+    end
+    get "/foo"
+    assert_equal 200, status
+    assert_equal 'test', body
+    get "/foo"
+    assert_equal 200, status
+    assert_equal 'test', body
+    Time.stub(:now, Time.now + 2) { get "/foo" }
+    assert_equal 500, status
+  end
+
+  it 'should allow expires passed in controller option' do
+    called = false
+    mock_app do
+      register Padrino::Cache
+      controller :cache => [ :expires => 1 ] do
+        enable :caching
+        get("/foo"){ called ? halt(500) : (called = 'test') }
+      end
+    end
+    get "/foo"
+    assert_equal 200, status
+    assert_equal 'test', body
+    get "/foo"
+    assert_equal 200, status
+    assert_equal 'test', body
+    Time.stub(:now, Time.now + 2) { get "/foo" }
+    assert_equal 500, status
+  end
+
   it 'should allow controller-wide expires' do
     called = false
     mock_app do

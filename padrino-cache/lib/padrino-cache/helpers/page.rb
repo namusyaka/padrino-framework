@@ -94,24 +94,6 @@ module Padrino
 
         CACHED_VERBS = { 'GET' => true, 'HEAD' => true }.freeze
 
-        def self.padrino_route_added(route, verb, *)
-          return unless route.cache && CACHED_VERBS[verb]
-
-          route.before_filters do
-            next unless settings.caching?
-            if cached_response = load_cached_response
-              content_type cached_response[:content_type]
-              halt 200, cached_response[:body]
-            end
-          end
-
-          route.after_filters do
-            save_cached_response(route.cache_expires) if settings.caching?
-          end
-        end
-
-        private
-
         def load_cached_response
           began_at = Time.now
           route_cache_key = resolve_cache_key || env['PATH_INFO']
@@ -123,14 +105,15 @@ module Padrino
         end
 
         def save_cached_response(cache_expires)
-          return unless @_response_buffer.kind_of?(String)
+          response_body = @_response_buffer || response.body.last
+          return unless response_body.kind_of?(String)
 
           began_at = Time.now
-          route_cache_key = resolve_cache_key || env['PATH_INFO']
+          route_cache_key = resolve_cache_key || request.env['PATH_INFO']
 
           content = {
-            :body         => @_response_buffer,
-            :content_type => @_content_type
+            :body         => response_body,
+            :content_type =>  response.content_type
           }
 
           settings.cache.store(route_cache_key, content, :expires => cache_expires)
@@ -142,8 +125,21 @@ module Padrino
         # Resolve the cache_key when it's a block in the correct context.
         #
         def resolve_cache_key
+          return unless @route
           key = @route.cache_key
           key.is_a?(Proc) ? instance_eval(&key) : key
+        end
+
+        def cache_expired?
+          settings.caching? && @__caching_route && !@__cache_available
+        end
+
+        CACHE_VARIABLES = [:cache_available, :cache_expires, :caching_route].freeze
+
+        def reset_cache_variables
+          CACHE_VARIABLES.each do |name|
+            remove_instance_variable(:"@#{name}") if instance_variable_defined?(:"@#{name}")
+          end
         end
 
         module ClassMethods
@@ -161,6 +157,45 @@ module Padrino
           #
           def expires(time)
             @_expires = time
+          end
+
+          def cache(*args)
+            if cache_condition?(args)
+              cache_expires = @_expires
+              if expires = extract_expires(args)
+                cache_expires = expires
+              end
+              condition do
+                return true unless settings.caching? && Padrino::Cache::Helpers::Page::CACHED_VERBS[request.request_method]
+                cache_expires = @route.cache_expires if @route && @route.cache_expires
+                @__cache_expires = cache_expires
+                @__caching_route = true
+                if cached_response = load_cached_response
+                  @__cache_available = true
+                  content_type cached_response[:content_type]
+                  halt 200, cached_response[:body]
+                end
+              end
+            else
+              settings.cache_adapter
+            end
+          end
+
+          private
+
+          def extract_expires(args)
+            head = args.pop
+            head.kind_of?(Hash) ? head[:expires] : nil
+          end
+
+          def cache_condition?(args)
+            if args.empty?
+              false
+            elsif args.length == 1 
+              !!args.first
+            else
+              args
+            end
           end
         end
       end
