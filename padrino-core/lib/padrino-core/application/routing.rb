@@ -985,8 +985,8 @@ module Padrino
 
         # Should not overwrite params by given query
         @params.merge!(params) do |key, original, newval|
-          key = key.to_sym
-          @route.significant_variable_names.include?(key) ? newval : original
+          significant_variable_names = @route.significant_variable_names.map(&:to_s)
+          significant_variable_names.include?(key) ? newval : original
         end unless params.empty?
 
         @params[:format] = params[:format] if params[:format]
