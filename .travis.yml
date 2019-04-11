@@ -2,7 +2,8 @@ language: ruby
 sudo: false
 cache: bundler
 before_install:
-  - gem install bundler
+  - gem uninstall bundler --all
+  - gem install bundler -v 1.17.3
 install:
   - bundle update
 rvm:
